@@ -504,99 +504,109 @@ async function gameLoopCycle(swappedCandy1, swappedCandy2) { // Ajout des bonbon
             return;
         }
 
-        const matchData = findAllMatchesAndMarkSpecials(swappedCandy1, swappedCandy2, iterationCount === 1);
+        // 1. Détecter les matchs au début de ce cycle de cascade
+        const matchData = (iterationCount === 1) ?
+                          findAllMatchesAndMarkSpecials(swappedCandy1, swappedCandy2, true) :
+                          findAllMatchesAndMarkSpecials(null, null, false);
+
         let candiesToRemoveFromMatches = matchData.candiesToRemove;
         const specialCandiesToCreate = matchData.specialCandiesToCreate;
 
-        let allCandiesToProcessForRemoval = new Set(candiesToRemoveFromMatches);
-        let activatedSpecialsThisIteration = new Set();
-        let pointsFromThisCycle = 0;
+        // La condition pour continuer est si des matchs ont été trouvés OU des spéciaux doivent être créés
+        continueCascading = candiesToRemoveFromMatches.length > 0 || specialCandiesToCreate.length > 0;
 
-        // Boucle pour gérer l'activation en chaîne des spéciaux
-        let newActivationsFoundInLoop;
-        do {
-            newActivationsFoundInLoop = false;
-            let newlyAffectedByActivation = [];
+        if (continueCascading) {
+            console.log(`Cycle de cascade ${iterationCount}: ${candiesToRemoveFromMatches.length} à suppr (matchs), ${specialCandiesToCreate.length} à créer.`);
 
-            let candidatesForActivation = [...allCandiesToProcessForRemoval, ...specialCandiesToCreate.map(s => s.originalCandy)];
+            let allCandiesToProcessForRemoval = new Set(candiesToRemoveFromMatches);
+            let activatedSpecialsThisIteration = new Set();
+            let pointsFromThisCycle = 0;
 
-            for (const candy of candidatesForActivation) {
-                if (candy && candy.specialType && !activatedSpecialsThisIteration.has(candy)) {
-                    console.log(`Activation du bonbon spécial: ${candy.id} de type ${candy.specialType}`);
-                    activatedSpecialsThisIteration.add(candy);
-                    allCandiesToProcessForRemoval.add(candy);
+            // Boucle pour gérer l'activation en chaîne des spéciaux
+            let newActivationsFoundInLoop;
+            do {
+                newActivationsFoundInLoop = false;
+                let newlyAffectedByActivation = [];
+                // On itère sur une copie car allCandiesToProcessForRemoval peut être modifié
+                let candidatesForActivation = [...allCandiesToProcessForRemoval, ...specialCandiesToCreate.map(s => s.originalCandy)];
 
-                    if (candy.specialType === 'striped_h') {
-                        for (let c = 0; c < numCols; c++) {
-                            const targetCandy = grid[candy.row][c];
-                            if (targetCandy && !allCandiesToProcessForRemoval.has(targetCandy)) {
-                                newlyAffectedByActivation.push(targetCandy);
-                                newActivationsFoundInLoop = true;
+
+                for (const candy of candidatesForActivation) {
+                    if (candy && candy.specialType && !activatedSpecialsThisIteration.has(candy)) {
+                        console.log(`Activation du bonbon spécial: ${candy.id} de type ${candy.specialType}`);
+                        activatedSpecialsThisIteration.add(candy);
+                        allCandiesToProcessForRemoval.add(candy);
+
+                        if (candy.specialType === 'striped_h') {
+                            for (let c_idx = 0; c_idx < numCols; c_idx++) {
+                                const targetCandy = grid[candy.row][c_idx];
+                                if (targetCandy && !allCandiesToProcessForRemoval.has(targetCandy)) {
+                                    newlyAffectedByActivation.push(targetCandy);
+                                    newActivationsFoundInLoop = true;
+                                }
+                            }
+                        } else if (candy.specialType === 'striped_v') {
+                            for (let r_idx = 0; r_idx < numRows; r_idx++) {
+                                const targetCandy = grid[r_idx][candy.col];
+                                if (targetCandy && !allCandiesToProcessForRemoval.has(targetCandy)) {
+                                    newlyAffectedByActivation.push(targetCandy);
+                                    newActivationsFoundInLoop = true;
+                                }
                             }
                         }
-                    } else if (candy.specialType === 'striped_v') {
-                        for (let r = 0; r < numRows; r++) {
-                            const targetCandy = grid[r][candy.col];
-                            if (targetCandy && !allCandiesToProcessForRemoval.has(targetCandy)) {
-                                newlyAffectedByActivation.push(targetCandy);
-                                newActivationsFoundInLoop = true;
-                            }
+                        candy.specialType = null;
+                        if(candy.element) {
+                            candy.element.classList.remove('striped_h', 'striped_v');
                         }
                     }
-                    candy.specialType = null;
-                    if(candy.element) {
-                        candy.element.classList.remove('striped_h', 'striped_v');
-                        // L'emoji de base reste visible car c'est le textContent
+                }
+                newlyAffectedByActivation.forEach(c => allCandiesToProcessForRemoval.add(c));
+            } while (newActivationsFoundInLoop);
+            // Fin de la logique d'activation des spéciaux
+
+            // Début de la création des nouveaux spéciaux
+            specialCandiesToCreate.forEach(specialInfo => {
+                const { row, col, type, baseType, originalCandy } = specialInfo;
+                if (allCandiesToProcessForRemoval.has(originalCandy) && !activatedSpecialsThisIteration.has(originalCandy)) {
+                     console.log(`Le bonbon ${originalCandy.id} (${originalCandy.type}) devait devenir ${type} mais il est emporté par un autre effet.`);
+                } else if (!activatedSpecialsThisIteration.has(originalCandy)) {
+                    originalCandy.specialType = type;
+                    originalCandy.type = baseType;
+                    if (originalCandy.element) {
+                        originalCandy.element.className = '';
+                        originalCandy.element.classList.add('candy', type);
+                        originalCandy.element.textContent = originalCandy.type;
                     }
-                }
-            }
-            newlyAffectedByActivation.forEach(c => allCandiesToProcessForRemoval.add(c));
-        } while (newActivationsFoundInLoop);
-
-
-        specialCandiesToCreate.forEach(specialInfo => {
-            const { row, col, type, baseType, originalCandy } = specialInfo; // Utiliser baseType
-            if (allCandiesToProcessForRemoval.has(originalCandy) && !activatedSpecialsThisIteration.has(originalCandy)) {
-                 console.log(`Le bonbon ${originalCandy.id} (${originalCandy.type}) devait devenir ${type} mais il est emporté par un autre effet.`);
-            } else if (!activatedSpecialsThisIteration.has(originalCandy)) {
-                originalCandy.specialType = type;
-                originalCandy.type = baseType; // Le type de base (emoji) est conservé
-                if (originalCandy.element) {
-                    originalCandy.element.className = '';
-                    originalCandy.element.classList.add('candy', type);
-                    originalCandy.element.textContent = originalCandy.type; // S'assurer que l'emoji est toujours là
-                }
-                if (candiesToRemoveFromMatches.includes(originalCandy)) {
-                   allCandiesToProcessForRemoval.delete(originalCandy);
-                }
-                pointsFromThisCycle += 10;
-                console.log(`Bonbon spécial ${type} avec base ${baseType} créé à ${row},${col}`);
-            }
-        });
-
-        matchesFoundThisCycle = allCandiesToProcessForRemoval.size > 0;
-
-        if (matchesFoundThisCycle) {
-            let effectiveCandiesRemovedCount = 0;
-            allCandiesToProcessForRemoval.forEach(candy => {
-                const wasTransformedAndStays = specialCandiesToCreate.some(sci => sci.originalCandy === candy && sci.originalCandy.specialType !== null);
-                if (!wasTransformedAndStays) {
-                    effectiveCandiesRemovedCount++;
+                    // Si le bonbon devient spécial, il n'est pas "supprimé" par le match qui l'a créé directement.
+                    // Il est retiré de allCandiesToProcessForRemoval s'il y était uniquement à cause du match simple.
+                    if (candiesToRemoveFromMatches.includes(originalCandy)) {
+                       allCandiesToProcessForRemoval.delete(originalCandy);
+                    }
+                    pointsFromThisCycle += 10; // Point pour la création du spécial
+                    console.log(`Bonbon spécial ${type} avec base ${baseType} créé à ${row},${col}`);
                 }
             });
-            // Le score pour les spéciaux créés est déjà compté.
-            // On ajoute ici les points pour les bonbons effectivement retirés.
-            pointsFromThisCycle += effectiveCandiesRemovedCount * 10;
+            // Fin de la création des nouveaux spéciaux
+
+            // Recalculer les points pour les bonbons effectivement retirés
+            allCandiesToProcessForRemoval.forEach(candy => {
+                const isTransformedAndStays = specialCandiesToCreate.some(sci => sci.originalCandy === candy && !activatedSpecialsThisIteration.has(sci.originalCandy));
+                if (!isTransformedAndStays) { // Ne pas recompter les points pour un bonbon qui devient spécial
+                    pointsFromThisCycle += 10;
+                }
+            });
 
 
-            if (pointsFromThisCycle > 0) { // Ajustement: ne compter que les points réellement gagnés dans ce cycle
-                 score += pointsFromThisCycle; // pointsFromThisCycle peut être recalculé plus précisément
+            if (pointsFromThisCycle > 0) {
+                 score += pointsFromThisCycle;
                  scoreElement.textContent = score;
-                 console.log(`Score total pour ce cycle (ajusté): ${pointsFromThisCycle}. Nouveau score global: ${score}`);
+                 console.log(`Score pour ce cycle: ${pointsFromThisCycle}. Nouveau score global: ${score}`);
             }
 
+            // Animation et suppression
             allCandiesToProcessForRemoval.forEach(candy => {
-                const isNowSpecialAndStays = specialCandiesToCreate.some(sci => sci.originalCandy === candy && sci.originalCandy.specialType !== null);
+                // Ne pas animer comme 'matched' un bonbon qui vient d'être transformé en spécial et qui reste
+                const isNowSpecialAndStays = specialCandiesToCreate.some(sci => sci.originalCandy === candy && !activatedSpecialsThisIteration.has(sci.originalCandy) );
                 if (candy.element && !isNowSpecialAndStays) {
                      candy.element.classList.add('matched');
                 }
@@ -605,7 +615,8 @@ async function gameLoopCycle(swappedCandy1, swappedCandy2) { // Ajout des bonbon
             await new Promise(resolve => setTimeout(resolve, MATCH_ANIMATION_DURATION));
 
             allCandiesToProcessForRemoval.forEach(candy => {
-                const isNowSpecialAndStays = specialCandiesToCreate.some(sci => sci.originalCandy === candy && sci.originalCandy.specialType !== null);
+                // Ne pas supprimer un bonbon qui vient d'être transformé en spécial et qui reste
+                const isNowSpecialAndStays = specialCandiesToCreate.some(sci => sci.originalCandy === candy && !activatedSpecialsThisIteration.has(sci.originalCandy));
                 if (!isNowSpecialAndStays) {
                     if (candy.element) candy.element.remove();
                     if (grid[candy.row] && grid[candy.row][candy.col] === candy) {
@@ -617,11 +628,11 @@ async function gameLoopCycle(swappedCandy1, swappedCandy2) { // Ajout des bonbon
             await dropCandies();
             await fillGrid();
 
-            console.log("Cycle de match/activation/chute/remplissage terminé. Vérification de nouveaux matchs...");
+            console.log(`Fin du cycle de cascade ${iterationCount}. Vérification pour prochaine cascade...`);
         }
-    } while (matchesFoundThisCycle);
+    } while (continueCascading);
 
-    console.log("Plus de matchs trouvés après les cascades.");
+    console.log("Plus de matchs trouvés après toutes les cascades. Le jeu est stable.");
     isSwapping = false;
 }
 
