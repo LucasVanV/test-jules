@@ -9,8 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const numCols = 8;
     const candySize = 50; // en pixels
 
-    // Types de bonbons (couleurs pour l'instant)
-    const candyColors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
+    // Types de bonbons (maintenant des emojis)
+    const candyEmojis = ['🍎', '🍊', '🍓', '🍇', '🍋', '🍉'];
+    const CANDY_TYPES_COUNT = candyEmojis.length;
+
 
     let grid = []; // Tableau 2D pour représenter la grille logique des bonbons
     let score = 0;
@@ -20,25 +22,21 @@ document.addEventListener('DOMContentLoaded', () => {
     gameBoardElement.style.height = `${numRows * candySize}px`;
 
 
-    // Fonction pour obtenir un type de bonbon aléatoire
+    // Fonction pour obtenir un type de bonbon aléatoire (maintenant un emoji)
     function getRandomCandyType() {
-        return candyColors[Math.floor(Math.random() * candyColors.length)];
+        return candyEmojis[Math.floor(Math.random() * CANDY_TYPES_COUNT)];
     }
 
     // Fonction pour vérifier les alignements à un endroit donné (pour l'initialisation)
-    // Retourne true s'il y a un alignement de 3 avec le nouveau bonbon, false sinon.
-    function hasInitialMatch(row, col, color, currentGrid) {
-        // Vérification horizontale: le nouveau bonbon (currentGrid[row][col]) forme-t-il un trio avec les deux à sa gauche ?
+    function hasInitialMatch(row, col, type, currentGrid) {
         if (col >= 2 &&
-            currentGrid[row][col - 1] && currentGrid[row][col - 1].color === color &&
-            currentGrid[row][col - 2] && currentGrid[row][col - 2].color === color) {
+            currentGrid[row][col - 1] && currentGrid[row][col - 1].type === type &&
+            currentGrid[row][col - 2] && currentGrid[row][col - 2].type === type) {
             return true;
         }
-
-        // Vérification verticale: le nouveau bonbon forme-t-il un trio avec les deux au-dessus ?
         if (row >= 2 &&
-            currentGrid[row - 1][col] && currentGrid[row - 1][col].color === color &&
-            currentGrid[row - 2][col] && currentGrid[row - 2][col].color === color) {
+            currentGrid[row - 1][col] && currentGrid[row - 1][col].type === type &&
+            currentGrid[row - 2][col] && currentGrid[row - 2][col].type === type) {
             return true;
         }
         return false;
@@ -51,17 +49,18 @@ document.addEventListener('DOMContentLoaded', () => {
             grid[r] = [];
             for (let c = 0; c < numCols; c++) {
                 let candyColor;
-                // Choisir une couleur jusqu'à ce qu'elle ne crée pas d'alignement initial
+                // Choisir un type (emoji) jusqu'à ce qu'il ne crée pas d'alignement initial
+                let candyType;
                 do {
-                    candyColor = getRandomCandyType();
-                } while (hasInitialMatch(r, c, candyColor, grid));
+                    candyType = getRandomCandyType();
+                } while (hasInitialMatch(r, c, candyType, grid));
 
                 const candy = {
-                    color: candyColor,
-                    row: r, // Position logique
-                    col: c, // Position logique
-                    id: `candy-${r}-${c}`, // ID unique pour l'élément DOM
-                    // element: null // Référence à l'élément DOM, sera ajoutée lors du rendu
+                    type: candyType, // Stocker l'emoji comme 'type'
+                    row: r,
+                    col: c,
+                    id: `candy-${r}-${c}`,
+                    specialType: null // Initialiser specialType
                 };
                 grid[r][c] = candy;
             }
@@ -86,19 +85,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function createCandyElement(candy) {
         const candyElement = document.createElement('div');
         candyElement.id = candy.id;
-        candyElement.classList.add('candy', `candy-${candy.color}`);
-        // Positionner le bonbon en utilisant ses coordonnées de grille et la taille du bonbon
+        candyElement.dataset.row = candy.row;
+        candyElement.dataset.col = candy.col;
+        candyElement.classList.add('candy');
+        if (candy.specialType) {
+            candyElement.classList.add(candy.specialType);
+        }
+        candyElement.textContent = candy.type;
+
         candyElement.style.left = `${candy.col * candySize}px`;
         candyElement.style.top = `${candy.row * candySize}px`;
-        // On pourrait ajouter un texte ou une image ici si on ne voulait pas juste des couleurs
-        // candyElement.textContent = candy.color[0].toUpperCase();
 
         gameBoardElement.appendChild(candyElement);
-        // On peut stocker la référence à l'élément DOM dans l'objet candy pour un accès facile plus tard
         candy.element = candyElement;
         return candyElement;
     }
-
 
     // --- Logique de jeu (sera développée dans les prochaines étapes) ---
 
@@ -113,18 +114,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const clickedElement = event.target.closest('.candy');
         if (!clickedElement) return; // Clic en dehors d'un bonbon
 
-        // Retrouver l'objet bonbon logique à partir de l'ID de l'élément
-        // L'objet candy est stocké sur l'élément lors de sa création (candy.element = candyElement)
-        // Et l'élément est dans grid[r][c].element
-        // On peut aussi retrouver r, c depuis l'id si on ne stocke pas la ref à l'objet logique sur l'élément
-        const [prefix, rStr, cStr] = clickedElement.id.split('-');
-        const r = parseInt(rStr);
-        const c = parseInt(cStr);
-        const clickedCandy = grid[r][c]; // Accès direct à l'objet bonbon logique
+        // Lire r et c depuis les data-attributes
+        const r = parseInt(clickedElement.dataset.row);
+        const c = parseInt(clickedElement.dataset.col);
+
+        // Vérifier si r et c sont des nombres valides
+        if (isNaN(r) || isNaN(c)) {
+            console.error("Impossible de récupérer les coordonnées du bonbon depuis les data-attributes:", clickedElement);
+            return;
+        }
+
+        const clickedCandy = grid[r][c];
+
+        if (!clickedCandy) {
+            console.error(`Aucun bonbon trouvé en grid[${r}][${c}] pour l'élément`, clickedElement);
+            // Cela peut arriver si la grille logique n'est pas synchronisée avec le DOM, ou si l'ID/dataset est incorrect.
+            return;
+        }
+
 
         if (!firstCandySelected) {
             firstCandySelected = clickedCandy;
-            clickedCandy.element.classList.add('selected'); // Utiliser la réf stockée
+            if (clickedCandy.element) clickedCandy.element.classList.add('selected');
         } else {
             if (firstCandySelected.id === clickedCandy.id) {
                 firstCandySelected.element.classList.remove('selected');
@@ -239,24 +250,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 let matchLength = 1;
                 // Compter la longueur du match potentiel
-                while (c + matchLength < numCols && grid[r][c + matchLength] && grid[r][c + matchLength].color === candy1.color) {
+                while (c + matchLength < numCols && grid[r][c + matchLength] && grid[r][c + matchLength].type === candy1.type) { // Compare .type
                     matchLength++;
                 }
 
                 if (matchLength >= 3) {
                     let specialCreatedInThisMatch = false;
-                    // Logique pour décider quel bonbon devient spécial (celui cliqué/swappé)
-                    // Pour l'instant, on prend le premier du segment de 4 ou 5.
-                    // Ou, si un des bonbons swappés est dans ce match, c'est lui qui devient spécial.
-                    // Cette logique sera affinée. Pour l'instant, on prend le premier bonbon de l'alignement.
                     let specialCandidate = grid[r][c];
+                    // TODO: Affiner la sélection du specialCandidate basé sur swappedCandy1/2
 
-                    if (matchLength >= 4) { // Condition pour bonbon rayé
+                    if (matchLength >= 4) {
                         specialCandiesToCreate.push({
                             row: specialCandidate.row,
                             col: specialCandidate.col,
-                            type: 'striped_v', // Match H -> Rayure V
-                            color: specialCandidate.color,
+                            type: 'striped_v',
+                            baseType: specialCandidate.type, // Stocker l'emoji de base
                             originalCandy: specialCandidate
                         });
                         specialCreatedInThisMatch = true;
@@ -266,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let i = 0; i < matchLength; i++) {
                         const currentCandy = grid[r][c + i];
                         if (specialCreatedInThisMatch && currentCandy === specialCandidate && matchLength >=4) {
-                            // Ne pas ajouter à la suppression si c'est le bonbon qui devient spécial
+                            // Ne pas ajouter à la suppression
                         } else {
                             candiesToRemove.add(currentCandy);
                         }
@@ -283,20 +291,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!candy1) { r++; continue; }
 
                 let matchLength = 1;
-                while (r + matchLength < numRows && grid[r + matchLength][c] && grid[r + matchLength][c].color === candy1.color) {
+                while (r + matchLength < numRows && grid[r + matchLength][c] && grid[r + matchLength][c].type === candy1.type) { // Compare .type
                     matchLength++;
                 }
 
                 if (matchLength >= 3) {
                     let specialCreatedInThisMatch = false;
                     let specialCandidate = grid[r][c];
+                    // TODO: Affiner la sélection du specialCandidate
 
                     if (matchLength >= 4) {
                         specialCandiesToCreate.push({
                             row: specialCandidate.row,
                             col: specialCandidate.col,
-                            type: 'striped_h', // Match V -> Rayure H
-                            color: specialCandidate.color,
+                            type: 'striped_h',
+                            baseType: specialCandidate.type, // Stocker l'emoji de base
                             originalCandy: specialCandidate
                         });
                         specialCreatedInThisMatch = true;
@@ -432,7 +441,8 @@ async function fillGrid() {
                     row: r,
                     col: c,
                     id: `candy-${r}-${c}-new-${Date.now().toString(36)}${Math.random().toString(36).substr(2, 5)}`,
-                    specialType: null // Les nouveaux bonbons ne sont pas spéciaux par défaut
+                    type: candyType, // Stocker l'emoji comme 'type'
+                    specialType: null
                 };
                 grid[r][c] = newCandy;
 
@@ -521,7 +531,7 @@ async function gameLoopCycle(swappedCandy1, swappedCandy2) { // Ajout des bonbon
                             const targetCandy = grid[candy.row][c];
                             if (targetCandy && !allCandiesToProcessForRemoval.has(targetCandy)) {
                                 newlyAffectedByActivation.push(targetCandy);
-                                newActivationsFoundInLoop = true; // Marquer qu'une activation a eu lieu
+                                newActivationsFoundInLoop = true;
                             }
                         }
                     } else if (candy.specialType === 'striped_v') {
@@ -529,13 +539,14 @@ async function gameLoopCycle(swappedCandy1, swappedCandy2) { // Ajout des bonbon
                             const targetCandy = grid[r][candy.col];
                             if (targetCandy && !allCandiesToProcessForRemoval.has(targetCandy)) {
                                 newlyAffectedByActivation.push(targetCandy);
-                                newActivationsFoundInLoop = true; // Marquer qu'une activation a eu lieu
+                                newActivationsFoundInLoop = true;
                             }
                         }
                     }
                     candy.specialType = null;
                     if(candy.element) {
                         candy.element.classList.remove('striped_h', 'striped_v');
+                        // L'emoji de base reste visible car c'est le textContent
                     }
                 }
             }
@@ -543,53 +554,50 @@ async function gameLoopCycle(swappedCandy1, swappedCandy2) { // Ajout des bonbon
         } while (newActivationsFoundInLoop);
 
 
-        // Créer les nouveaux bonbons spéciaux (ceux formés par des matchs de 4, etc.)
         specialCandiesToCreate.forEach(specialInfo => {
-            const { row, col, type, originalCandy } = specialInfo;
+            const { row, col, type, baseType, originalCandy } = specialInfo; // Utiliser baseType
             if (allCandiesToProcessForRemoval.has(originalCandy) && !activatedSpecialsThisIteration.has(originalCandy)) {
-                 console.log(`Le bonbon ${originalCandy.id} devait devenir ${type} mais il est emporté par un effet.`);
+                 console.log(`Le bonbon ${originalCandy.id} (${originalCandy.type}) devait devenir ${type} mais il est emporté par un autre effet.`);
             } else if (!activatedSpecialsThisIteration.has(originalCandy)) {
                 originalCandy.specialType = type;
+                originalCandy.type = baseType; // Le type de base (emoji) est conservé
                 if (originalCandy.element) {
                     originalCandy.element.className = '';
-                    originalCandy.element.classList.add('candy', `candy-${originalCandy.color}`, type);
+                    originalCandy.element.classList.add('candy', type);
+                    originalCandy.element.textContent = originalCandy.type; // S'assurer que l'emoji est toujours là
                 }
-                // S'il devient spécial, il n'est pas "supprimé" par le match qui l'a créé.
-                // Il faut le retirer de allCandiesToProcessForRemoval s'il y était à cause du match simple.
                 if (candiesToRemoveFromMatches.includes(originalCandy)) {
                    allCandiesToProcessForRemoval.delete(originalCandy);
                 }
                 pointsFromThisCycle += 10;
-                console.log(`Bonbon spécial ${type} créé à ${row},${col} (était ${originalCandy.id})`);
+                console.log(`Bonbon spécial ${type} avec base ${baseType} créé à ${row},${col}`);
             }
         });
 
         matchesFoundThisCycle = allCandiesToProcessForRemoval.size > 0;
 
         if (matchesFoundThisCycle) {
-            // Calcul du score basé sur TOUS les bonbons retirés.
-            // Ceux qui sont devenus spéciaux ont déjà contribué 10 points.
-            // Les autres (dans allCandiesToProcessForRemoval qui ne sont pas devenus spéciaux) rapportent 10 points.
+            let effectiveCandiesRemovedCount = 0;
             allCandiesToProcessForRemoval.forEach(candy => {
-                const wasTransformedAndKept = specialCandiesToCreate.some(sci => sci.originalCandy === candy && sci.originalCandy.specialType !== null);
-                if (!wasTransformedAndKept) {
-                    pointsFromThisCycle += 10;
+                const wasTransformedAndStays = specialCandiesToCreate.some(sci => sci.originalCandy === candy && sci.originalCandy.specialType !== null);
+                if (!wasTransformedAndStays) {
+                    effectiveCandiesRemovedCount++;
                 }
             });
-            // Note: la duplication potentielle de points (10 pour création + 10 pour suppression si pas géré) est à surveiller.
-            // La logique ci-dessus tente de l'éviter : un bonbon transformé ne donne pas de points de suppression.
-            // Un bonbon activé donne ses points de suppression.
+            // Le score pour les spéciaux créés est déjà compté.
+            // On ajoute ici les points pour les bonbons effectivement retirés.
+            pointsFromThisCycle += effectiveCandiesRemovedCount * 10;
 
-            if (pointsFromThisCycle > 0) {
-                 score += pointsFromThisCycle;
+
+            if (pointsFromThisCycle > 0) { // Ajustement: ne compter que les points réellement gagnés dans ce cycle
+                 score += pointsFromThisCycle; // pointsFromThisCycle peut être recalculé plus précisément
                  scoreElement.textContent = score;
-                 console.log(`Score total pour ce cycle: ${pointsFromThisCycle}. Nouveau score global: ${score}`);
+                 console.log(`Score total pour ce cycle (ajusté): ${pointsFromThisCycle}. Nouveau score global: ${score}`);
             }
 
-            // Animer et supprimer TOUS les bonbons identifiés pour suppression effective
             allCandiesToProcessForRemoval.forEach(candy => {
                 const isNowSpecialAndStays = specialCandiesToCreate.some(sci => sci.originalCandy === candy && sci.originalCandy.specialType !== null);
-                if (candy.element && !isNowSpecialAndStays) { // Ne pas appliquer .matched à un bonbon qui vient d'être transformé et reste
+                if (candy.element && !isNowSpecialAndStays) {
                      candy.element.classList.add('matched');
                 }
             });

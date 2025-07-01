@@ -73,18 +73,39 @@ h1 {
     transition: transform 0.3s ease-out, top 0.3s ease-out, left 0.3s ease-out;
 }
 
-/* Exemples de couleurs de bonbons - seront étendus */
-.candy-red { background-color: #ff4136; color: white; }
-.candy-blue { background-color: #0074d9; color: white; }
-.candy-green { background-color: #2ecc40; color: white; }
-.candy-yellow { background-color: #ffdc00; color: black; }
-.candy-purple { background-color: #b10dc9; color: white; }
-.candy-orange { background-color: #ff851b; color: white; }
+/* Exemples de couleurs de bonbons - SUPPRIMÉES car on utilise les emojis */
+/* .candy-red { background-color: #ff4136; color: white; } */
+/* .candy-blue { background-color: #0074d9; color: white; } */
+/* .candy-green { background-color: #2ecc40; color: white; } */
+/* .candy-yellow { background-color: #ffdc00; color: black; } */
+/* .candy-purple { background-color: #b10dc9; color: white; } */
+/* .candy-orange { background-color: #ff851b; color: white; } */
+
+.candy {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 38px; /* Ajuster pour la taille des emojis */
+    line-height: 50px; /* Aide à centrer verticalement certains emojis */
+    box-sizing: border-box;
+    cursor: pointer;
+    user-select: none;
+    position: absolute;
+    transition: transform 0.3s ease-out, top 0.3s ease-out, left 0.3s ease-out, opacity 0.3s;
+    background-color: rgba(230, 230, 230, 0.2); /* Fond très léger pour voir les limites, ou transparent */
+    border: 1px solid rgba(200,200,200,0.3); /* Bordure légère optionnelle */
+    border-radius: 8px; /* Un peu de douceur */
+}
+
 
 /* Style pour un bonbon sélectionné (optionnel) */
 .candy.selected {
-    outline: 3px solid #000;
-    transform: scale(1.1);
+    /* outline: 3px solid #4a4a4a; */ /* Alternative à la transformation */
+    transform: scale(1.1); /* Peut être conservé si ça rend bien avec les emojis */
+    background-color: rgba(0,0,0,0.1); /* Assombrir légèrement pour indiquer la sélection */
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
 }
 
 /* Style pour les bonbons en cours de suppression (animation) */
@@ -92,4 +113,45 @@ h1 {
     transform: scale(0.1);
     opacity: 0;
     transition: transform 0.3s ease-in, opacity 0.3s ease-in;
+}
+
+.candy.striped-h, .candy.striped-v {
+    /* L'emoji (textContent) sera toujours là. Les rayures se superposent. */
+}
+
+.candy.striped-h::before {
+    content: '';
+    position: absolute;
+    left: 6px; right: 6px; top: 50%;
+    height: 7px;
+    background-color: rgba(255,255,255,0.75);
+    transform: translateY(-50%);
+    border-radius: 3px;
+    z-index: 1;
+}
+.candy.striped-h::after {
+    content: '';
+    position: absolute;
+    left: 6px; right: 6px;
+    /* Deuxième rayure pour un effet plus visible */
+    top: calc(50% + 10px); height: 4px; background-color: rgba(255,255,255,0.5); transform: translateY(-50%); border-radius: 2px; z-index: 1;
+    /* Ou une seule rayure plus épaisse, ou un autre style */
+}
+
+
+.candy.striped-v::before {
+    content: '';
+    position: absolute;
+    top: 6px; bottom: 6px; left: 50%;
+    width: 7px;
+    background-color: rgba(255,255,255,0.75);
+    transform: translateX(-50%);
+    border-radius: 3px;
+    z-index: 1;
+}
+.candy.striped-v::after {
+    content: '';
+    position: absolute;
+    top: 6px; bottom: 6px;
+    left: calc(50% + 10px); width: 4px; background-color: rgba(255,255,255,0.5); transform: translateX(-50%); border-radius: 2px; z-index: 1;
 }
