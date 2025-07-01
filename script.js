@@ -13,7 +13,9 @@ canvas.height = 400;
 const TABLE_COLOR = 'darkgreen';
 const BORDER_COLOR = 'saddlebrown';
 const BALL_RADIUS = 10;
-const POCKET_RADIUS = 15;
+const POCKET_RADIUS = 15; // Utilisé pour la détection d'empochage
+const BORDER_WIDTH = 20; // Épaisseur visuelle de la bordure
+const POCKET_VISUAL_RADIUS = 18; // Rayon visuel du trou, légèrement plus grand pour un meilleur effet
 
 // Propriétés des boules
 let balls = [];
@@ -32,22 +34,37 @@ let gameMessage = { text: "", timeLeft: 0 };
 const MESSAGE_DISPLAY_TIME = 120; // en frames (environ 2 secondes à 60fps)
 
 
-// Les trous (poches)
+// Les trous (poches) - Ajustés pour BORDER_WIDTH
 const pockets = [
-    { x: 0, y: 0 }, { x: canvas.width / 2, y: 0 }, { x: canvas.width, y: 0 },
-    { x: 0, y: canvas.height }, { x: canvas.width / 2, y: canvas.height }, { x: canvas.width, y: canvas.height }
+    { x: BORDER_WIDTH, y: BORDER_WIDTH },                                          // Coin haut-gauche
+    { x: canvas.width / 2, y: BORDER_WIDTH },                                    // Milieu haut
+    { x: canvas.width - BORDER_WIDTH, y: BORDER_WIDTH },                          // Coin haut-droite
+    { x: BORDER_WIDTH, y: canvas.height - BORDER_WIDTH },                          // Coin bas-gauche
+    { x: canvas.width / 2, y: canvas.height - BORDER_WIDTH },                    // Milieu bas
+    { x: canvas.width - BORDER_WIDTH, y: canvas.height - BORDER_WIDTH }           // Coin bas-droite
 ];
 
 function drawTable() {
+    // Surface de jeu (tapis vert)
     ctx.fillStyle = TABLE_COLOR;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = BORDER_COLOR;
-    ctx.lineWidth = 20;
-    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+
+    // Bordures marron
+    ctx.fillStyle = BORDER_COLOR;
+    // Bande supérieure
+    ctx.fillRect(0, 0, canvas.width, BORDER_WIDTH);
+    // Bande inférieure
+    ctx.fillRect(0, canvas.height - BORDER_WIDTH, canvas.width, BORDER_WIDTH);
+    // Bande gauche (attention à ne pas recouvrir les coins déjà faits par les bandes H)
+    ctx.fillRect(0, BORDER_WIDTH, BORDER_WIDTH, canvas.height - 2 * BORDER_WIDTH);
+    // Bande droite
+    ctx.fillRect(canvas.width - BORDER_WIDTH, BORDER_WIDTH, BORDER_WIDTH, canvas.height - 2 * BORDER_WIDTH);
+
+    // Trous noirs par-dessus
     ctx.fillStyle = 'black';
     pockets.forEach(pocket => {
         ctx.beginPath();
-        ctx.arc(pocket.x, pocket.y, POCKET_RADIUS, 0, Math.PI * 2);
+        ctx.arc(pocket.x, pocket.y, POCKET_VISUAL_RADIUS, 0, Math.PI * 2);
         ctx.fill();
     });
 }
@@ -75,14 +92,29 @@ function updateBallPosition(ball) {
 }
 
 function handleWallCollision(ball) {
-    const tableBorderThickness = 10 + BALL_RADIUS;
-    if (ball.x + ball.radius > canvas.width - tableBorderThickness || ball.x - ball.radius < tableBorderThickness) {
+    // Les collisions avec les murs doivent maintenant prendre en compte BORDER_WIDTH
+    // et le fait que la zone de jeu commence après BORDER_WIDTH.
+    const playAreaX_start = BORDER_WIDTH;
+    const playAreaX_end = canvas.width - BORDER_WIDTH;
+    const playAreaY_start = BORDER_WIDTH;
+    const playAreaY_end = canvas.height - BORDER_WIDTH;
+
+    // Collision avec les murs verticaux (gauche/droite)
+    if (ball.x + ball.radius > playAreaX_end) {
         ball.vx *= -1;
-        ball.x = ball.x + ball.radius > canvas.width - tableBorderThickness ? canvas.width - tableBorderThickness - ball.radius : tableBorderThickness + ball.radius;
+        ball.x = playAreaX_end - ball.radius;
+    } else if (ball.x - ball.radius < playAreaX_start) {
+        ball.vx *= -1;
+        ball.x = playAreaX_start + ball.radius;
     }
-    if (ball.y + ball.radius > canvas.height - tableBorderThickness || ball.y - ball.radius < tableBorderThickness) {
+
+    // Collision avec les murs horizontaux (haut/bas)
+    if (ball.y + ball.radius > playAreaY_end) {
         ball.vy *= -1;
-        ball.y = ball.y + ball.radius > canvas.height - tableBorderThickness ? canvas.height - tableBorderThickness - ball.radius : tableBorderThickness + ball.radius;
+        ball.y = playAreaY_end - ball.radius;
+    } else if (ball.y - ball.radius < playAreaY_start) {
+        ball.vy *= -1;
+        ball.y = playAreaY_start + ball.radius;
     }
 }
 
@@ -120,7 +152,8 @@ function isBallPocketed(ball) {
         const dx = pocket.x - ball.x;
         const dy = pocket.y - ball.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance < POCKET_RADIUS + ball.radius / 2) {
+        // Utiliser POCKET_RADIUS pour la détection logique, POCKET_VISUAL_RADIUS est pour l'affichage
+        if (distance < POCKET_RADIUS + ball.radius * 0.5) { // On peut affiner la zone de détection
             return true;
         }
     }
@@ -134,9 +167,9 @@ function handleCueBallPocketed() {
     cueBall.y = canvas.height / 2;
     cueBall.vx = 0;
     cueBall.vy = 0;
-    // Ensure cueball is in balls array if it was removed
-    if (!balls.find(b => b.isCueBall)) {
-        balls.push(cueBall);
+    // Ensure cueball is in balls array if it was removed (it shouldn't be removed by splice if handled correctly)
+    if (!balls.some(b => b.isCueBall)) { // .some est plus performant si on cherche juste l'existence
+        balls.push(cueBall); // La remettre si elle a disparu par erreur
     }
 }
 
@@ -328,9 +361,17 @@ function init() {
     gameStarted = true;
     currentPlayer = 1;
     shotTaken = false;
-    turnEvaluated = true;
+    turnEvaluated = true; // Prêt pour le premier tir
     ballsPocketedThisShot = { cueBall: false, objectBalls: 0 };
-    setupBalls();
+
+    // Réinitialiser la position de la boule blanche au centre de sa zone de départ
+    cueBall.x = canvas.width / 4; // Position de départ standard
+    cueBall.y = canvas.height / 2;
+    cueBall.vx = 0;
+    cueBall.vy = 0;
+
+    setupBalls(); // Place la blanche et les autres boules
+
     gameMessage.text = `Joueur ${currentPlayer} commence !`;
     gameMessage.timeLeft = MESSAGE_DISPLAY_TIME;
     console.log(`Nouvelle partie ! C'est au tour de Joueur ${currentPlayer}.`);
@@ -338,18 +379,19 @@ function init() {
 
 startButton.addEventListener('click', () => {
     init();
-    // La boucle de jeu est supposée être continue. Si elle avait été arrêtée (ex: après victoire),
-    // init() remet gameStarted à true, et la boucle reprendra la logique de jeu.
-    // Si la boucle avait été complètement arrêtée (pas juste la logique de jeu), il faudrait la relancer ici.
-    // Pour l'instant, on part du principe que requestAnimationFrame(gameLoop) maintient la boucle.
 });
 
-// Appel initial pour dessiner la table et les boules au chargement
-// init(); // On attend le clic sur "Commencer" pour la première initialisation complète
-// Pour le premier affichage, on peut juste dessiner la table et les boules en position initiale
-drawTable();
-setupBalls(); // Pour que les boules soient là au premier rendu
-drawBalls();  // avant le premier clic sur "Commencer"
+// Appel initial pour dessiner la table et les boules au chargement.
+// La boucle gameLoop() est démarrée à la fin du script et tourne en continu.
+// Elle dessinera l'état initial basé sur gameStarted = false au début.
+// init() n'est appelé que par le bouton "Commencer".
+
+// Pour le tout premier affichage avant que "Commencer" ne soit cliqué :
+// On s'assure que les boules sont configurées pour être dessinées par gameLoop.
+// Mais init() n'est pas appelé, donc gameStarted reste false.
+setupBalls(); // Configure les positions initiales des boules.
+// gameLoop s'occupera du premier dessin.
+
 
 // --- Section pour les contrôles du joueur ---
 let isAiming = false;
