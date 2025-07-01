@@ -434,14 +434,14 @@ async function fillGrid() {
         for (let r = numRows - 1; r >= 0; r--) {
             if (grid[r][c] === null) {
                 newCandiesInColCount++;
-                let candyColor = getRandomCandyType();
+                let newCandyType = getRandomCandyType(); // Correction: déclarer et initialiser ici
 
                 const newCandy = {
-                    color: candyColor,
+                    // color: newCandyType, // 'color' n'est plus utilisé, remplacé par 'type' pour l'emoji
+                    type: newCandyType,  // Utiliser la variable correctement initialisée
                     row: r,
                     col: c,
                     id: `candy-${r}-${c}-new-${Date.now().toString(36)}${Math.random().toString(36).substr(2, 5)}`,
-                    type: candyType, // Stocker l'emoji comme 'type'
                     specialType: null
                 };
                 grid[r][c] = newCandy;
